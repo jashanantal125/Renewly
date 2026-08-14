@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root,
   },
+  images: {
+    // Google profile photos, shown on the account button after signing in.
+    remotePatterns: [
+      { protocol: "https", hostname: "lh3.googleusercontent.com" },
+    ],
+  },
 };
 
 export default nextConfig;
