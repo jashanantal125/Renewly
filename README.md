@@ -53,6 +53,18 @@ Renewly rejects a flat “remind 7 days before everything” rule. Instead:
 
 Core logic lives in `src/lib/` (pure functions + tests). The UI is a thin client over that engine.
 
+## Saving feedback
+
+Adding a renewal opens a centered dialog rather than pushing the page around,
+and saving raises a toast that names *when the first nudge will land*, e.g.
+"First nudge in 50 days on 3 Oct 2026, 90 days before it is due."
+
+That wording is deliberate. A bare "Saved" tells the user nothing about whether
+the app will actually reach them in time, which is the one promise this app
+makes. The toast carries a progress bar so its auto-dismiss is visible instead
+of the message just disappearing. Overdue and already-nudging items get their
+own phrasing rather than a made-up future date.
+
 ## Notifications
 
 The bell shows a count of items currently inside their reminder window — the
@@ -121,4 +133,4 @@ render what those functions return.
 
 Core workflow is working: add / edit / delete / renew, summary bar, grouped
 reminder digest, calendar with per-item detail, and notifications with
-conditional dismissal. 26 tests cover the logic in `src/lib`.
+conditional dismissal. 30 tests cover the logic in `src/lib`.

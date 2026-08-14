@@ -14,10 +14,13 @@ export function PanelShell({
   label,
   onClose,
   children,
+  align = "end",
 }: {
   label: string;
   onClose: () => void;
   children: (close: () => void) => ReactNode;
+  /** "end" hangs off the header buttons; "center" reads as a dialog. */
+  align?: "end" | "center";
 }) {
   const [closing, setClosing] = useState(false);
 
@@ -34,21 +37,23 @@ export function PanelShell({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [close]);
 
+  const centered = align === "center";
+
   return (
     <div
       onClick={close}
-      className={`fixed inset-0 z-50 flex justify-center bg-stone-900/20 px-4 py-6 backdrop-blur-sm sm:justify-end sm:px-6 ${
-        closing ? "animate-overlay-out" : "animate-overlay-in"
-      }`}
+      className={`fixed inset-0 z-50 flex justify-center overflow-y-auto bg-stone-900/20 px-4 py-6 backdrop-blur-sm sm:px-6 ${
+        centered ? "sm:items-center" : "sm:justify-end"
+      } ${closing ? "animate-overlay-out" : "animate-overlay-in"}`}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={label}
         onClick={(event) => event.stopPropagation()}
-        className={`h-fit max-h-full w-full max-w-md origin-top overflow-y-auto rounded-2xl border border-stone-200 bg-white shadow-xl sm:origin-top-right ${
-          closing ? "animate-panel-out" : "animate-panel-in"
-        }`}
+        className={`h-fit w-full origin-top rounded-2xl border border-stone-200 bg-white shadow-xl ${
+          centered ? "max-w-lg" : "max-h-full max-w-md overflow-y-auto sm:origin-top-right"
+        } ${closing ? "animate-panel-out" : "animate-panel-in"}`}
       >
         {children(close)}
       </div>

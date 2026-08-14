@@ -228,6 +228,47 @@ export function explainUrgency(view: ReminderView): string {
   return `Still ${daysUntil} days away. Reminders start ${leadTimeDays} days before it is due.`;
 }
 
+/** The day nudges begin for a renewal: due date minus its lead time. */
+export function reminderStartDate(renewal: Renewal): string {
+  const due = parseLocalDate(renewal.renewalDate);
+  return formatLocalDate(addDays(due, -resolveLeadTime(renewal)));
+}
+
+/**
+ * Confirmation text after saving, so the user learns when this item will
+ * actually nudge instead of trusting that "saved" means "handled".
+ */
+export function describeReminderStart(
+  renewal: Renewal,
+  now: Date = new Date(),
+): string {
+  const view = buildReminderView(renewal, now);
+
+  if (view.urgency === "overdue") {
+    return `This is already ${Math.abs(view.daysUntil)} day${
+      Math.abs(view.daysUntil) === 1 ? "" : "s"
+    } overdue, so it is at the top of your list.`;
+  }
+
+  if (view.shouldNudge) {
+    return `Inside its ${view.leadTimeDays}-day window already, so it is in your reminders now.`;
+  }
+
+  const startsIn = view.daysUntil - view.leadTimeDays;
+  return `First nudge in ${startsIn} day${startsIn === 1 ? "" : "s"} on ${formatShortDate(
+    reminderStartDate(renewal),
+  )}, ${view.leadTimeDays} days before it is due.`;
+}
+
+/** e.g. "3 Oct 2026" */
+export function formatShortDate(iso: string): string {
+  return parseLocalDate(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 /** Short human phrase for days until / overdue. */
 export function formatDaysUntil(daysUntil: number): string {
   if (daysUntil === 0) return "Due today";

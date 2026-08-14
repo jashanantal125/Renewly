@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   buildReminderDigest,
+  describeReminderStart,
   formatDaysUntil,
   groupByUrgency,
   markRenewalDone,
@@ -19,105 +20,33 @@ import { createRenewal, updateRenewal, type RenewalInput } from "@/lib/renewals"
 import { useAcks, useRenewals } from "@/lib/useRenewals";
 import { CalendarPanel } from "@/components/CalendarPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
+import { RenewalFormModal } from "@/components/RenewalFormModal";
+import { Toast, type ToastMessage } from "@/components/Toast";
 import {
   URGENCY_BADGE,
   URGENCY_BORDER,
   URGENCY_TITLE,
 } from "@/components/urgencyStyles";
-import type {
-  ReminderView,
-  Renewal,
-  RenewalCycle,
-  RenewalType,
-  Urgency,
-} from "@/lib/types";
+import type { ReminderView, Renewal, Urgency } from "@/lib/types";
 import {
   RENEWAL_CYCLE_LABELS,
   RENEWAL_TYPE_LABELS,
   URGENCY_ORDER,
 } from "@/lib/types";
-import { DEFAULT_LEAD_TIME_DAYS } from "@/lib/leadTimes";
 
-type FormState = {
-  name: string;
-  type: RenewalType;
-  renewalDate: string;
-  cycle: RenewalCycle;
-  customCycleDays: string;
-  leadTimeOverrideDays: string;
-  notes: string;
-};
+const TOAST_DURATION_MS = 6000;
 
-const emptyForm = (): FormState => ({
-  name: "",
-  type: "subscription",
-  renewalDate: "",
-  cycle: "yearly",
-  customCycleDays: "",
-  leadTimeOverrideDays: "",
-  notes: "",
-});
-
-function toInput(form: FormState): RenewalInput | null {
-  if (!form.name.trim() || !form.renewalDate) return null;
-
-  const customCycleDays =
-    form.cycle === "custom" && form.customCycleDays
-      ? Number(form.customCycleDays)
-      : undefined;
-
-  if (
-    form.cycle === "custom" &&
-    (customCycleDays == null ||
-      Number.isNaN(customCycleDays) ||
-      customCycleDays <= 0)
-  ) {
-    return null;
-  }
-
-  const leadTimeOverrideDays = form.leadTimeOverrideDays
-    ? Number(form.leadTimeOverrideDays)
-    : undefined;
-
-  if (
-    leadTimeOverrideDays != null &&
-    (Number.isNaN(leadTimeOverrideDays) || leadTimeOverrideDays < 0)
-  ) {
-    return null;
-  }
-
-  return {
-    name: form.name,
-    type: form.type,
-    renewalDate: form.renewalDate,
-    cycle: form.cycle,
-    customCycleDays,
-    leadTimeOverrideDays,
-    notes: form.notes || undefined,
-  };
-}
-
-function formFromRenewal(renewal: Renewal): FormState {
-  return {
-    name: renewal.name,
-    type: renewal.type,
-    renewalDate: renewal.renewalDate,
-    cycle: renewal.cycle,
-    customCycleDays: renewal.customCycleDays?.toString() ?? "",
-    leadTimeOverrideDays: renewal.leadTimeOverrideDays?.toString() ?? "",
-    notes: renewal.notes ?? "",
-  };
-}
+/** null = closed, otherwise new (no renewal) or editing an existing one. */
+type FormTarget = { renewal?: Renewal } | null;
 
 export default function Home() {
   const [renewals, setRenewals] = useRenewals();
   const [acks, setAcks] = useAcks();
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [formTarget, setFormTarget] = useState<FormTarget>(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const toastTimer = useRef<number | null>(null);
 
   const digest = useMemo(() => buildReminderDigest(renewals), [renewals]);
   const grouped = useMemo(() => groupByUrgency(digest), [digest]);
@@ -129,36 +58,29 @@ export default function Home() {
   const silencedCount =
     digest.filter((view) => view.shouldNudge).length - notifications.length;
 
-  function resetForm() {
-    setForm(emptyForm());
-    setEditingId(null);
-    setError(null);
-    setShowForm(false);
+  function showToast(title: string, body: string) {
+    if (toastTimer.current != null) window.clearTimeout(toastTimer.current);
+    setToast({ key: Date.now(), title, body });
+    toastTimer.current = window.setTimeout(
+      () => setToast(null),
+      TOAST_DURATION_MS,
+    );
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const input = toInput(form);
-    if (!input) {
-      setError("Name, renewal date, and a valid cycle are required.");
-      return;
-    }
+  function handleSave(input: RenewalInput) {
+    const editing = formTarget?.renewal;
 
-    if (editingId) {
-      setRenewals((prev) =>
-        prev.map((r) => (r.id === editingId ? updateRenewal(r, input) : r)),
-      );
+    if (editing) {
+      const updated = updateRenewal(editing, input);
+      setRenewals(renewals.map((r) => (r.id === editing.id ? updated : r)));
+      showToast(`${updated.name} updated`, describeReminderStart(updated));
     } else {
-      setRenewals((prev) => [...prev, createRenewal(input)]);
+      const created = createRenewal(input);
+      setRenewals([...renewals, created]);
+      showToast(`${created.name} saved`, describeReminderStart(created));
     }
-    resetForm();
-  }
 
-  function startEdit(renewal: Renewal) {
-    setForm(formFromRenewal(renewal));
-    setEditingId(renewal.id);
-    setShowForm(true);
-    setError(null);
+    setFormTarget(null);
   }
 
   function removeRenewal(id: string) {
@@ -170,17 +92,17 @@ export default function Home() {
         remaining.map((r) => r.id),
       ),
     );
-    if (editingId === id) resetForm();
   }
 
   function handleMarkDone(renewal: Renewal) {
     if (renewal.cycle === "once") {
       removeRenewal(renewal.id);
+      showToast(`${renewal.name} cleared`, "One-time renewals are removed once done.");
       return;
     }
-    setRenewals((prev) =>
-      prev.map((r) => (r.id === renewal.id ? markRenewalDone(r) : r)),
-    );
+    const advanced = markRenewalDone(renewal);
+    setRenewals(renewals.map((r) => (r.id === renewal.id ? advanced : r)));
+    showToast(`${advanced.name} renewed`, describeReminderStart(advanced));
   }
 
   return (
@@ -225,13 +147,8 @@ export default function Home() {
             <h2 className="text-lg font-semibold tracking-tight">Coming up</h2>
             <button
               type="button"
-              onClick={() => {
-                setShowForm(true);
-                setEditingId(null);
-                setForm(emptyForm());
-                setError(null);
-              }}
-              className="rounded-md bg-emerald-800 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-emerald-900"
+              onClick={() => setFormTarget({})}
+              className="rounded-lg bg-emerald-800 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-md active:translate-y-0"
             >
               Add renewal
             </button>
@@ -253,7 +170,7 @@ export default function Home() {
                     key={urgency}
                     urgency={urgency}
                     items={items}
-                    onEdit={startEdit}
+                    onEdit={(renewal) => setFormTarget({ renewal })}
                     onDone={handleMarkDone}
                     onDelete={removeRenewal}
                   />
@@ -263,169 +180,19 @@ export default function Home() {
           )}
         </section>
 
-        {showForm && (
-          <section className="rounded-xl border border-stone-200 bg-white/80 p-5 shadow-sm backdrop-blur sm:p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold tracking-tight">
-                {editingId ? "Edit renewal" : "New renewal"}
-              </h2>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="text-sm text-stone-500 hover:text-stone-800"
-              >
-                Cancel
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-              <label className="block space-y-1.5 sm:col-span-2">
-                <span className="text-sm font-medium text-stone-700">Name</span>
-                <input
-                  required
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, name: e.target.value }))
-                  }
-                  placeholder="e.g. Passport, Netflix, Car road tax"
-                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700"
-                />
-              </label>
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-stone-700">Type</span>
-                <select
-                  value={form.type}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      type: e.target.value as RenewalType,
-                    }))
-                  }
-                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700"
-                >
-                  {(Object.keys(RENEWAL_TYPE_LABELS) as RenewalType[]).map(
-                    (t) => (
-                      <option key={t} value={t}>
-                        {RENEWAL_TYPE_LABELS[t]} (default{" "}
-                        {DEFAULT_LEAD_TIME_DAYS[t]}d lead)
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-stone-700">
-                  Renewal date
-                </span>
-                <input
-                  required
-                  type="date"
-                  value={form.renewalDate}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, renewalDate: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700"
-                />
-              </label>
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-stone-700">Cycle</span>
-                <select
-                  value={form.cycle}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      cycle: e.target.value as RenewalCycle,
-                    }))
-                  }
-                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700"
-                >
-                  {(Object.keys(RENEWAL_CYCLE_LABELS) as RenewalCycle[]).map(
-                    (c) => (
-                      <option key={c} value={c}>
-                        {RENEWAL_CYCLE_LABELS[c]}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-
-              {form.cycle === "custom" && (
-                <label className="block space-y-1.5">
-                  <span className="text-sm font-medium text-stone-700">
-                    Custom cycle (days)
-                  </span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.customCycleDays}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        customCycleDays: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700"
-                  />
-                </label>
-              )}
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-stone-700">
-                  Lead time override (days, optional)
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.leadTimeOverrideDays}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      leadTimeOverrideDays: e.target.value,
-                    }))
-                  }
-                  placeholder={`Default: ${DEFAULT_LEAD_TIME_DAYS[form.type]}`}
-                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700"
-                />
-              </label>
-
-              <label className="block space-y-1.5 sm:col-span-2">
-                <span className="text-sm font-medium text-stone-700">
-                  Notes (optional)
-                </span>
-                <textarea
-                  rows={2}
-                  value={form.notes}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, notes: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700"
-                />
-              </label>
-
-              {error && (
-                <p className="sm:col-span-2 text-sm text-red-700">{error}</p>
-              )}
-
-              <div className="sm:col-span-2">
-                <button
-                  type="submit"
-                  className="rounded-md bg-emerald-800 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-900"
-                >
-                  {editingId ? "Save changes" : "Save renewal"}
-                </button>
-              </div>
-            </form>
-          </section>
+        {formTarget && (
+          <RenewalFormModal
+            renewal={formTarget.renewal}
+            onSave={handleSave}
+            onClose={() => setFormTarget(null)}
+          />
         )}
 
         {showCalendar && (
           <CalendarPanel
             renewals={renewals}
             onClose={() => setShowCalendar(false)}
-            onEdit={startEdit}
+            onEdit={(renewal) => setFormTarget({ renewal })}
             onMarkDone={handleMarkDone}
           />
         )}
@@ -440,6 +207,14 @@ export default function Home() {
               setAcks((prev) => acknowledgeAll(prev, notifications))
             }
             onMarkDone={handleMarkDone}
+          />
+        )}
+
+        {toast && (
+          <Toast
+            message={toast}
+            durationMs={TOAST_DURATION_MS}
+            onDismiss={() => setToast(null)}
           />
         )}
 
@@ -603,21 +378,21 @@ function UrgencySection({
                 <button
                   type="button"
                   onClick={() => onDone(item.renewal)}
-                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50"
+                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
                 >
                   {item.renewal.cycle === "once" ? "Done" : "Renewed"}
                 </button>
                 <button
                   type="button"
                   onClick={() => onEdit(item.renewal)}
-                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50"
+                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
                   onClick={() => onDelete(item.renewal.id)}
-                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
                 >
                   Delete
                 </button>

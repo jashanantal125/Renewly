@@ -12,9 +12,11 @@ import {
   buildReminderDigest,
   buildReminderView,
   classifyUrgency,
+  describeReminderStart,
   formatDaysUntil,
   markRenewalDone,
   nextRenewalDate,
+  reminderStartDate,
   sortReminders,
   summarizeDigest,
 } from "./reminders";
@@ -158,6 +160,43 @@ describe("cycle advance", () => {
       new Date("2026-08-14T10:00:00.000Z"),
     );
     assert.equal(done.renewalDate, "2027-08-14");
+  });
+});
+
+describe("reminder start", () => {
+  const now = new Date(2026, 7, 14);
+
+  it("is the due date minus the lead time", () => {
+    assert.equal(
+      reminderStartDate(
+        renewal({ name: "Passport", type: "passport", renewalDate: "2027-01-01" }),
+      ),
+      "2026-10-03",
+    );
+  });
+
+  it("tells the user when the first nudge lands", () => {
+    const message = describeReminderStart(
+      renewal({ name: "Passport", type: "passport", renewalDate: "2027-01-01" }),
+      now,
+    );
+    assert.match(message, /First nudge in 50 days on 3 Oct 2026/);
+  });
+
+  it("says so when the item already nudges", () => {
+    const message = describeReminderStart(
+      renewal({ name: "Netflix", type: "subscription", renewalDate: "2026-08-18" }),
+      now,
+    );
+    assert.match(message, /Inside its 7-day window already/);
+  });
+
+  it("flags an overdue item instead of promising a future nudge", () => {
+    const message = describeReminderStart(
+      renewal({ name: "Car insurance", type: "insurance", renewalDate: "2026-08-11" }),
+      now,
+    );
+    assert.match(message, /already 3 days overdue/);
   });
 });
 
