@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import {
   buildReminderDigest,
   describeReminderStart,
@@ -17,7 +17,12 @@ import {
 } from "@/lib/notifications";
 import { createRenewal, updateRenewal, type RenewalInput } from "@/lib/renewals";
 import { useAcks, useRenewals } from "@/lib/useRenewals";
+import { useRenewalSync } from "@/lib/useRenewalSync";
+import { useSession } from "@/lib/useSession";
+import { AccountMenu } from "@/components/AccountMenu";
+import { AuthErrorNotice } from "@/components/AuthErrorNotice";
 import { CalendarPanel } from "@/components/CalendarPanel";
+import { GmailCta } from "@/components/GmailCta";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { RenewalFormModal } from "@/components/RenewalFormModal";
 import { RenewalList } from "@/components/RenewalList";
@@ -38,6 +43,9 @@ export default function Home() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastTimer = useRef<number | null>(null);
+  const session = useSession();
+
+  useRenewalSync(renewals, session.user != null);
 
   const digest = useMemo(() => buildReminderDigest(renewals), [renewals]);
   const grouped = useMemo(() => groupByUrgency(digest), [digest]);
@@ -46,8 +54,8 @@ export default function Home() {
     () => buildNotifications(digest, acks),
     [digest, acks],
   );
-  const silencedCount =
-    digest.filter((view) => view.shouldNudge).length - notifications.length;
+  const nudgeCount = digest.filter((view) => view.shouldNudge).length;
+  const silencedCount = nudgeCount - notifications.length;
 
   function showToast(title: string, body: string) {
     if (toastTimer.current != null) window.clearTimeout(toastTimer.current);
@@ -118,6 +126,17 @@ export default function Home() {
               onClick={() => setShowCalendar(true)}
               icon={<CalendarIcon />}
             />
+            {session.user && (
+              <AccountMenu
+                user={session.user}
+                mailConfigured={session.mailConfigured}
+                syncedCount={renewals.length}
+                onToggleEmails={(enabled) =>
+                  void session.setEmailReminders(enabled)
+                }
+                onSignOut={() => void session.signOut()}
+              />
+            )}
           </div>
         </div>
 
@@ -128,6 +147,20 @@ export default function Home() {
         <TypeMarquee />
 
         <SummaryBar summary={summary} />
+
+        {/* Suspense keeps this page static: the query string arrives on the client. */}
+        <Suspense fallback={null}>
+          <AuthErrorNotice />
+        </Suspense>
+
+        {/*
+         * Offered after the summary, once the user can see what is coming up.
+         * Hidden entirely when the deployment has no OAuth credentials, so the
+         * offline build never shows a button that cannot work.
+         */}
+        {session.configured && !session.loading && !session.user && (
+          <GmailCta pendingCount={nudgeCount} />
+        )}
       </header>
 
       <section className="space-y-4">

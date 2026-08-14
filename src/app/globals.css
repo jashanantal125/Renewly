@@ -24,6 +24,9 @@
   --animate-nudge-x: nudge-x 1.8s ease-in-out infinite;
   --animate-card-in: card-in 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   --animate-bar-grow: bar-grow 700ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-glow-spin: glow-spin 4s linear infinite;
+  --animate-sheen: sheen 3.4s ease-in-out infinite;
+  --animate-popover-in: popover-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
 
   @keyframes overlay-in {
     from {
@@ -138,6 +141,42 @@
     }
     to {
       transform: scaleX(1);
+    }
+  }
+
+  /*
+   * The neon edge on the Gmail button. A conic gradient sits behind the button
+   * and rotates; rotating the gradient instead of animating many box-shadows
+   * keeps it on the compositor, so it stays smooth.
+   */
+  @keyframes glow-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Light sweeping across the button face. */
+  @keyframes sheen {
+    0% {
+      transform: translateX(-120%);
+    }
+    55%,
+    100% {
+      transform: translateX(220%);
+    }
+  }
+
+  @keyframes popover-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
     }
   }
 
