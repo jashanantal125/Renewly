@@ -1,14 +1,11 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
-
 /**
  * Explains a failed sign-in.
  *
- * The OAuth callback cannot render UI, so it redirects to `/?auth_error=reason`
- * and this turns the reason into something a person can act on. Without it a
- * failed sign-in would silently return the user to an unchanged page.
+ * The OAuth callback cannot render UI, so it records the reason in a one-shot
+ * cookie that `/api/me` returns and clears. Without this the user would be
+ * returned to an unchanged page with no idea why nothing happened.
  */
 const MESSAGES: Record<string, string> = {
   denied: "Sign-in was cancelled, so no reminders will be emailed.",
@@ -24,12 +21,13 @@ const MESSAGES: Record<string, string> = {
     "Signed in with Google, but your account could not be saved. Please try again shortly.",
 };
 
-export function AuthErrorNotice() {
-  const params = useSearchParams();
-  const [dismissed, setDismissed] = useState(false);
+interface AuthErrorNoticeProps {
+  reason: string | null;
+  onDismiss: () => void;
+}
 
-  const reason = params.get("auth_error");
-  if (!reason || dismissed) return null;
+export function AuthErrorNotice({ reason, onDismiss }: AuthErrorNoticeProps) {
+  if (!reason) return null;
 
   return (
     <div
@@ -39,7 +37,7 @@ export function AuthErrorNotice() {
       <p>{MESSAGES[reason] ?? "Sign-in did not complete. Please try again."}</p>
       <button
         type="button"
-        onClick={() => setDismissed(true)}
+        onClick={onDismiss}
         aria-label="Dismiss"
         className="shrink-0 rounded-md px-1.5 text-amber-700 transition hover:bg-amber-100"
       >

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   buildReminderDigest,
   describeReminderStart,
@@ -148,10 +148,10 @@ export default function Home() {
 
         <SummaryBar summary={summary} />
 
-        {/* Suspense keeps this page static: the query string arrives on the client. */}
-        <Suspense fallback={null}>
-          <AuthErrorNotice />
-        </Suspense>
+        <AuthErrorNotice
+          reason={session.authError}
+          onDismiss={session.dismissAuthError}
+        />
 
         {/*
          * Offered after the summary, once the user can see what is coming up.

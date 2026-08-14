@@ -6,6 +6,7 @@ import {
   resolveAppUrl,
 } from "@/lib/server/env";
 import {
+  AUTH_ERROR_COOKIE,
   OAUTH_STATE_COOKIE,
   SESSION_COOKIE,
   encodeSession,
@@ -45,10 +46,18 @@ function decodeIdToken(idToken: string): IdTokenClaims | null {
   }
 }
 
+/**
+ * Send the user home with the reason in a one-shot cookie rather than the URL,
+ * so refreshing the page cannot replay an error that has already been handled.
+ */
 function failure(request: Request, reason: string) {
-  const url = new URL(resolveAppUrl(request));
-  url.searchParams.set("auth_error", reason);
-  return NextResponse.redirect(url);
+  const response = NextResponse.redirect(new URL(resolveAppUrl(request)));
+  response.cookies.set(AUTH_ERROR_COOKIE, reason, {
+    ...sessionCookieOptions,
+    maxAge: 120,
+  });
+  response.cookies.delete(OAUTH_STATE_COOKIE);
+  return response;
 }
 
 /** Step 2: Google redirects back with a code, which we swap for an id_token. */

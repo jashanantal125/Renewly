@@ -14,6 +14,11 @@ export interface SessionState {
   /** False when the deployment has no OAuth credentials; the UI hides sign-in. */
   configured: boolean;
   mailConfigured: boolean;
+  /**
+   * Reason a sign-in failed, delivered once by the server and already cleared
+   * there, so it is shown for this visit only.
+   */
+  authError: string | null;
   user: SessionUser | null;
   loading: boolean;
 }
@@ -21,6 +26,7 @@ export interface SessionState {
 const INITIAL: SessionState = {
   configured: false,
   mailConfigured: false,
+  authError: null,
   user: null,
   loading: true,
 };
@@ -80,5 +86,10 @@ export function useSession() {
     setState((prev) => ({ ...prev, user: null }));
   }, []);
 
-  return { ...state, refresh, setEmailReminders, signOut };
+  const dismissAuthError = useCallback(
+    () => setState((prev) => ({ ...prev, authError: null })),
+    [],
+  );
+
+  return { ...state, refresh, setEmailReminders, signOut, dismissAuthError };
 }
