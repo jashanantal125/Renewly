@@ -10,7 +10,8 @@ Built for the [Shortcut Asia](https://shortcut.my) internship challenge (topic 0
 
 - **Next.js 16** (App Router) + **TypeScript**
 - **Tailwind CSS** for UI
-- **localStorage** for persistence (no backend required)
+- **localStorage** for persistence — the app is fully usable with no backend
+- **MongoDB + Gmail SMTP** (optional) for emailed reminders
 
 ## Getting started
 
@@ -19,13 +20,40 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). No configuration is needed:
+without credentials the app runs as a local tracker and the email sign-in button
+is hidden.
 
 ```bash
-npm test      # core reminder engine tests
+npm test      # 57 tests over the logic in src/lib
 npm run build # production build
 npm start     # serve production build
 ```
+
+## Optional: emailed reminders
+
+In-app nudges only work if you open the app. Signing in with Google mirrors your
+list to the server so a daily job can email you instead. To enable it, copy
+`.env.example` to `.env.local` and fill it in:
+
+| Variable | Where it comes from |
+|----------|--------------------|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud Console → Credentials → OAuth client ID (Web). Add `http://localhost:3000/api/auth/callback/google` as an authorised redirect URI. |
+| `AUTH_SECRET` | `openssl rand -base64 32` — signs the session cookie |
+| `MONGODB_URI` | A MongoDB Atlas free cluster, or a local `mongod` |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | A Gmail account and an [App Password](https://myaccount.google.com/apppasswords) (needs 2FA on) |
+| `CRON_SECRET` | `openssl rand -hex 32` — protects the job route |
+
+Then trigger the job manually instead of waiting for the schedule:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/reminders
+# → {"ok":true,"users":1,"emailed":1,"skipped":0,"failed":0}
+```
+
+On Vercel, `vercel.json` schedules the same route daily at 00:00 UTC (08:00 MYT)
+and Vercel Cron supplies that `Authorization` header from `CRON_SECRET`
+automatically.
 
 ## What it does
 
@@ -33,6 +61,7 @@ npm start     # serve production build
 2. **Reminder view** — a summary bar plus items grouped by urgency: Overdue → Act now → Coming up → Later
 3. **Calendar view** — month grid of what is due, with per-item detail explaining its bucket
 4. **Notifications** — only items inside their reminder window, dismissable without going silent forever
+5. **Emailed reminders** (optional) — sign in with Google and a daily job emails you when something enters its window
 
 ## The hard part
 
@@ -98,6 +127,56 @@ Otherwise a single dismissal would silence something right up to the day it
 lapses, which is the exact failure this app exists to prevent. Becoming *less*
 urgent does not resurface it.
 
+## Email reminders
+
+A reminder that only exists inside the app fails the person who never opens it.
+Signing in with Google turns the same nudges into email.
+
+The interesting part is what decides *when* to email. The job runs daily, so the
+question is not "what is due" but "what have I not already said" — which is
+exactly what the notification bell already answers. `planReminderEmails` hands
+the record of previously **emailed** nudges to the same `buildNotifications`
+function the UI uses for **dismissed** nudges:
+
+```23:35:src/lib/emailReminders.ts
+export function planReminderEmails(
+  renewals: Renewal[],
+  emailedNudges: AckMap,
+  now: Date = new Date(),
+): EmailPlan {
+  const digest = buildReminderDigest(renewals, now);
+  const views = buildNotifications(digest, emailedNudges);
+
+  return {
+    views,
+    nextEmailedNudges: acknowledgeAll(emailedNudges, views),
+  };
+}
+```
+
+So email inherits the rules for free: one email per renewal per urgency step, a
+fresh email when something escalates to *act now* or rolls into its next cycle,
+and silence otherwise. No second timing system to keep in step with the first.
+
+Other decisions worth calling out:
+
+- **The browser stays the source of truth.** Signing in mirrors your list to the
+  server (one-way, whole list, debounced) because the job cannot read
+  localStorage. Signed out, nothing changes. The cost is last-write-wins across
+  devices.
+- **Emails are recorded only after they send.** A mail outage retries tomorrow
+  rather than marking the reminder as delivered.
+- **Sessions are a signed cookie**, HMAC-SHA256 with a constant-time compare, so
+  there is no session table to keep in sync. Signed, not encrypted — it holds
+  only what the UI already displays.
+- **OAuth is hand-rolled** (~120 lines) rather than a library, so every step is
+  explainable: `state` cookie for CSRF, server-to-server code exchange, claims
+  read from the `id_token`.
+- **The button is hidden when unconfigured.** With no credentials, `/api/me`
+  reports `configured: false` and no sign-in is offered at all.
+- **The subject line names the most urgent item** ("Road tax — in 6 days"),
+  because a generic subject gets ignored in a full inbox.
+
 ## Summary bar
 
 Four counts at the top: total, overdue, due soon, upcoming. "Due soon" merges
@@ -130,16 +209,35 @@ UI (app/page.tsx, components/*)
   → notifications.ts (which nudges to show, acknowledgements)
   → calendar.ts    (month grid + cycle projection)
   → leadTimes.ts + dates.ts + types.ts
+  → useRenewalSync.ts (mirrors the list to the server when signed in)
+
+Server — only needed for email
+  api/auth/google + api/auth/callback/google  OAuth → signed session cookie
+  api/me                                      session, prefs
+  api/renewals                                stored copy of the list
+  api/cron/reminders                          daily job, CRON_SECRET
+    → emailReminders.ts (reuses notifications.ts)
+    → emailTemplate.ts  → server/mailer.ts (Gmail SMTP)
+    → server/users.ts   (MongoDB, one document per user)
 ```
 
 Every rule lives in `src/lib` as pure functions with tests; components only
-render what those functions return.
+render what those functions return, and the daily job calls the same functions
+the UI does. Anything touching credentials or the database is confined to
+`src/lib/server/`.
 
 ## Known limits
 
-- Data is per-browser (localStorage); no accounts or sync.
-- Nudges are in-app only — there is no push or email delivery, so the app has
-  to be opened for a reminder to be seen.
+- **Sync is last-write-wins** — two devices on one account overwrite each other
+  rather than merging.
+- **The job runs daily in UTC** and lead times are whole days, so an email can
+  arrive up to 24h after an item enters its window. No per-user timezone yet.
+- **Renewals are stored in plain text.** They are low-sensitivity, but a real
+  product should encrypt at rest.
+- **No unsubscribe link in the email** — the toggle lives in the app.
+- **The test-email rate limit is per-instance**, so it is not a real defence
+  across serverless instances.
+- Signed out, data is per-browser (localStorage) with no sync.
 - Urgency is computed when the page renders, so a tab left open overnight will
   not reclassify until it is reloaded.
 - Cycle projection is capped at 200 occurrences per item per view, so a very
@@ -148,5 +246,7 @@ render what those functions return.
 ## Project status
 
 Core workflow is working: add / edit / delete / renew, summary bar, grouped
-reminder digest, calendar with per-item detail, and notifications with
-conditional dismissal. 36 tests cover the logic in `src/lib`.
+reminder digest, calendar with per-item detail, notifications with conditional
+dismissal, and optional Google sign-in with a daily reminder email. 57 tests
+cover the logic in `src/lib`, including the session cookie and the sync payload
+validation.
