@@ -14,6 +14,8 @@ import {
   classifyUrgency,
   describeReminderStart,
   formatDaysUntil,
+  formatWindowCaption,
+  nudgeProgress,
   markRenewalDone,
   nextRenewalDate,
   reminderStartDate,
@@ -160,6 +162,68 @@ describe("cycle advance", () => {
       new Date("2026-08-14T10:00:00.000Z"),
     );
     assert.equal(done.renewalDate, "2027-08-14");
+  });
+});
+
+describe("nudgeProgress", () => {
+  const now = new Date(2026, 7, 14);
+
+  it("is empty before the window opens", () => {
+    const view = buildReminderView(
+      renewal({ name: "Passport", type: "passport", renewalDate: "2027-01-01" }),
+      now,
+    );
+    assert.equal(nudgeProgress(view), 0);
+  });
+
+  it("is halfway through a 30-day window at 15 days out", () => {
+    const view = buildReminderView(
+      renewal({ name: "Road tax", type: "road_tax", renewalDate: "2026-08-29" }),
+      now,
+    );
+    assert.equal(view.daysUntil, 15);
+    assert.equal(nudgeProgress(view), 0.5);
+  });
+
+  it("is full once due or lapsed", () => {
+    const due = buildReminderView(
+      renewal({ name: "Today", type: "other", renewalDate: "2026-08-14" }),
+      now,
+    );
+    const lapsed = buildReminderView(
+      renewal({ name: "Lapsed", type: "other", renewalDate: "2026-08-01" }),
+      now,
+    );
+    assert.equal(nudgeProgress(due), 1);
+    assert.equal(nudgeProgress(lapsed), 1);
+  });
+});
+
+describe("formatWindowCaption", () => {
+  const now = new Date(2026, 7, 14);
+
+  it("counts down to the window opening for quiet items", () => {
+    const view = buildReminderView(
+      renewal({ name: "Passport", type: "passport", renewalDate: "2027-01-01" }),
+      now,
+    );
+    assert.equal(formatWindowCaption(view), "Nudges start in 50 days");
+  });
+
+  it("shows remaining days once nudging", () => {
+    const view = buildReminderView(
+      renewal({ name: "Netflix", type: "subscription", renewalDate: "2026-08-18" }),
+      now,
+    );
+    assert.equal(formatWindowCaption(view), "4 of 7 days left to act");
+  });
+
+  it("does not promise time that has gone", () => {
+    const view = buildReminderView(
+      renewal({ name: "Lapsed", type: "other", renewalDate: "2026-08-01" }),
+      now,
+    );
+    assert.equal(formatWindowCaption(view), "Reminder window passed");
   });
 });
 

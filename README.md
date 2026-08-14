@@ -53,6 +53,19 @@ Renewly rejects a flat “remind 7 days before everything” rule. Instead:
 
 Core logic lives in `src/lib/` (pure functions + tests). The UI is a thin client over that engine.
 
+## Reading the list
+
+Each card carries a progress bar showing how far the item has moved through its
+reminder window, with a caption like "4 of 7 days left to act" or "Nudges start
+in 50 days". That turns the lead-time rule from a number in the code into
+something visible per item, and it is why the cards are worth more than a plain
+sorted list.
+
+The lead-time table itself is now the sliding row of type pills under the
+heading, generated from the same `DEFAULT_LEAD_TIME_DAYS` constant the engine
+uses. Seeing "Passport 90d" drift past "Subscription 7d" makes the core point
+without a paragraph explaining it.
+
 ## Saving feedback
 
 Adding a renewal opens a centered dialog rather than pushing the page around,
@@ -133,4 +146,4 @@ render what those functions return.
 
 Core workflow is working: add / edit / delete / renew, summary bar, grouped
 reminder digest, calendar with per-item detail, and notifications with
-conditional dismissal. 30 tests cover the logic in `src/lib`.
+conditional dismissal. 36 tests cover the logic in `src/lib`.

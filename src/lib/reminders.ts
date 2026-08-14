@@ -228,6 +228,32 @@ export function explainUrgency(view: ReminderView): string {
   return `Still ${daysUntil} days away. Reminders start ${leadTimeDays} days before it is due.`;
 }
 
+/**
+ * How far the item has travelled through its reminder window, 0 to 1.
+ *
+ * 0 means the window has not opened yet, 1 means it is due or lapsed. This is
+ * what the progress bar on each card draws, so the abstract lead-time rule
+ * becomes something you can see.
+ */
+export function nudgeProgress(view: ReminderView): number {
+  if (view.daysUntil <= 0) return 1;
+  if (view.leadTimeDays <= 0) return 1;
+  if (view.daysUntil >= view.leadTimeDays) return 0;
+  return (view.leadTimeDays - view.daysUntil) / view.leadTimeDays;
+}
+
+/** Short caption under the progress bar. */
+export function formatWindowCaption(view: ReminderView): string {
+  if (view.daysUntil < 0) return "Reminder window passed";
+
+  if (!view.shouldNudge) {
+    const startsIn = view.daysUntil - view.leadTimeDays;
+    return `Nudges start in ${startsIn} day${startsIn === 1 ? "" : "s"}`;
+  }
+
+  return `${view.daysUntil} of ${view.leadTimeDays} days left to act`;
+}
+
 /** The day nudges begin for a renewal: due date minus its lead time. */
 export function reminderStartDate(renewal: Renewal): string {
   const due = parseLocalDate(renewal.renewalDate);

@@ -4,7 +4,6 @@ import { useMemo, useRef, useState } from "react";
 import {
   buildReminderDigest,
   describeReminderStart,
-  formatDaysUntil,
   groupByUrgency,
   markRenewalDone,
   summarizeDigest,
@@ -21,18 +20,10 @@ import { useAcks, useRenewals } from "@/lib/useRenewals";
 import { CalendarPanel } from "@/components/CalendarPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { RenewalFormModal } from "@/components/RenewalFormModal";
+import { RenewalList } from "@/components/RenewalList";
 import { Toast, type ToastMessage } from "@/components/Toast";
-import {
-  URGENCY_BADGE,
-  URGENCY_BORDER,
-  URGENCY_TITLE,
-} from "@/components/urgencyStyles";
-import type { ReminderView, Renewal, Urgency } from "@/lib/types";
-import {
-  RENEWAL_CYCLE_LABELS,
-  RENEWAL_TYPE_LABELS,
-  URGENCY_ORDER,
-} from "@/lib/types";
+import { TypeMarquee } from "@/components/TypeMarquee";
+import type { Renewal } from "@/lib/types";
 
 const TOAST_DURATION_MS = 6000;
 
@@ -97,7 +88,10 @@ export default function Home() {
   function handleMarkDone(renewal: Renewal) {
     if (renewal.cycle === "once") {
       removeRenewal(renewal.id);
-      showToast(`${renewal.name} cleared`, "One-time renewals are removed once done.");
+      showToast(
+        `${renewal.name} cleared`,
+        "One-time renewals are removed once done.",
+      );
       return;
     }
     const advanced = markRenewalDone(renewal);
@@ -106,126 +100,101 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-full bg-[radial-gradient(ellipse_at_top,_#f4f7f2_0%,_#eef2f0_45%,_#e8ebe6_100%)] text-stone-900">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-5 py-10 sm:px-8 sm:py-14">
-        <header className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <p className="text-sm font-medium tracking-[0.2em] text-emerald-800/80 uppercase">
-              Renewly
-            </p>
-            <div className="flex items-center gap-2">
-              <HeaderButton
-                label="Notifications"
-                onClick={() => setShowNotifications(true)}
-                badge={notifications.length}
-                icon={<BellIcon />}
-              />
-              <HeaderButton
-                label="Calendar"
-                onClick={() => setShowCalendar(true)}
-                icon={<CalendarIcon />}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h1 className="max-w-xl font-serif text-4xl leading-tight tracking-tight text-stone-900 sm:text-5xl">
-              Renew before it lapses.
-            </h1>
-            <p className="max-w-lg text-base leading-relaxed text-stone-600">
-              Track road tax, licences, passports, insurance, and subscriptions.
-              Nudges use lead times that match how long each renewal actually
-              takes — not a flat seven-day alert for everything.
-            </p>
-          </div>
-
-          <SummaryBar summary={summary} />
-        </header>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-tight">Coming up</h2>
-            <button
-              type="button"
-              onClick={() => setFormTarget({})}
-              className="rounded-lg bg-emerald-800 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-md active:translate-y-0"
-            >
-              Add renewal
-            </button>
-          </div>
-
-          {renewals.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-stone-300 bg-white/50 px-5 py-8 text-sm text-stone-600">
-              Add your first renewal to see urgency buckets. Try a passport
-              (90-day lead) next to a subscription (7-day lead) to see why a
-              flat reminder rule fails.
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {URGENCY_ORDER.map((urgency) => {
-                const items = grouped[urgency];
-                if (items.length === 0) return null;
-                return (
-                  <UrgencySection
-                    key={urgency}
-                    urgency={urgency}
-                    items={items}
-                    onEdit={(renewal) => setFormTarget({ renewal })}
-                    onDone={handleMarkDone}
-                    onDelete={removeRenewal}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {formTarget && (
-          <RenewalFormModal
-            renewal={formTarget.renewal}
-            onSave={handleSave}
-            onClose={() => setFormTarget(null)}
-          />
-        )}
-
-        {showCalendar && (
-          <CalendarPanel
-            renewals={renewals}
-            onClose={() => setShowCalendar(false)}
-            onEdit={(renewal) => setFormTarget({ renewal })}
-            onMarkDone={handleMarkDone}
-          />
-        )}
-
-        {showNotifications && (
-          <NotificationsPanel
-            notifications={notifications}
-            silencedCount={silencedCount}
-            onClose={() => setShowNotifications(false)}
-            onDismiss={(view) => setAcks((prev) => acknowledge(prev, view))}
-            onDismissAll={() =>
-              setAcks((prev) => acknowledgeAll(prev, notifications))
-            }
-            onMarkDone={handleMarkDone}
-          />
-        )}
-
-        {toast && (
-          <Toast
-            message={toast}
-            durationMs={TOAST_DURATION_MS}
-            onDismiss={() => setToast(null)}
-          />
-        )}
-
-        <footer className="border-t border-stone-200/80 pt-6 text-xs leading-relaxed text-stone-500">
-          <p>
-            Lead times: passport 90d · licence 60d · road tax / insurance 30d ·
-            other 14d · subscription 7d. Urgency escalates into “act now” when
-            remaining days fall inside the action window for that type.
+    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-9 px-5 py-10 sm:px-8 sm:py-14">
+      <header className="space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-sm font-medium tracking-[0.2em] text-emerald-800/80 uppercase">
+            Renewly
           </p>
-        </footer>
-      </div>
+          <div className="flex items-center gap-2">
+            <HeaderButton
+              label="Notifications"
+              onClick={() => setShowNotifications(true)}
+              badge={notifications.length}
+              icon={<BellIcon />}
+            />
+            <HeaderButton
+              label="Calendar"
+              onClick={() => setShowCalendar(true)}
+              icon={<CalendarIcon />}
+            />
+          </div>
+        </div>
+
+        <h1 className="max-w-xl font-serif text-4xl leading-tight tracking-tight text-stone-900 sm:text-5xl">
+          Renew before it lapses.
+        </h1>
+
+        <TypeMarquee />
+
+        <SummaryBar summary={summary} />
+      </header>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">Coming up</h2>
+          <button
+            type="button"
+            onClick={() => setFormTarget({})}
+            className="rounded-lg bg-emerald-800 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-md active:translate-y-0"
+          >
+            Add renewal
+          </button>
+        </div>
+
+        {renewals.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-stone-300 bg-white/50 px-5 py-8 text-sm leading-relaxed text-stone-600">
+            Add your first renewal to see urgency buckets. Try a passport
+            (90-day lead) next to a subscription (7-day lead) to see why a flat
+            reminder rule fails.
+          </div>
+        ) : (
+          <RenewalList
+            grouped={grouped}
+            onEdit={(renewal) => setFormTarget({ renewal })}
+            onDone={handleMarkDone}
+            onDelete={removeRenewal}
+          />
+        )}
+      </section>
+
+      {formTarget && (
+        <RenewalFormModal
+          renewal={formTarget.renewal}
+          onSave={handleSave}
+          onClose={() => setFormTarget(null)}
+        />
+      )}
+
+      {showCalendar && (
+        <CalendarPanel
+          renewals={renewals}
+          onClose={() => setShowCalendar(false)}
+          onEdit={(renewal) => setFormTarget({ renewal })}
+          onMarkDone={handleMarkDone}
+        />
+      )}
+
+      {showNotifications && (
+        <NotificationsPanel
+          notifications={notifications}
+          silencedCount={silencedCount}
+          onClose={() => setShowNotifications(false)}
+          onDismiss={(view) => setAcks((prev) => acknowledge(prev, view))}
+          onDismissAll={() =>
+            setAcks((prev) => acknowledgeAll(prev, notifications))
+          }
+          onMarkDone={handleMarkDone}
+        />
+      )}
+
+      {toast && (
+        <Toast
+          message={toast}
+          durationMs={TOAST_DURATION_MS}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
@@ -322,85 +291,5 @@ function BellIcon() {
       <path d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 3-1.25 4-1.25 4h11.5s-1.25-1-1.25-4A4.5 4.5 0 0 0 10 3Z" />
       <path d="M8.5 14.5a1.75 1.75 0 0 0 3 0" />
     </svg>
-  );
-}
-
-function UrgencySection({
-  urgency,
-  items,
-  onEdit,
-  onDone,
-  onDelete,
-}: {
-  urgency: Urgency;
-  items: ReminderView[];
-  onEdit: (r: Renewal) => void;
-  onDone: (r: Renewal) => void;
-  onDelete: (id: string) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold tracking-wide text-stone-700 uppercase">
-        {URGENCY_TITLE[urgency]}
-        <span className="ml-2 font-normal normal-case text-stone-400">
-          {items.length}
-        </span>
-      </h3>
-      <ul className="space-y-2">
-        {items.map((item) => (
-          <li
-            key={item.renewal.id}
-            className={`rounded-lg border bg-white/90 px-4 py-3 ${URGENCY_BORDER[urgency]}`}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium text-stone-900">
-                    {item.renewal.name}
-                  </p>
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-xs font-medium ${URGENCY_BADGE[urgency]}`}
-                  >
-                    {formatDaysUntil(item.daysUntil)}
-                  </span>
-                </div>
-                <p className="text-sm text-stone-500">
-                  {RENEWAL_TYPE_LABELS[item.renewal.type]} ·{" "}
-                  {item.renewal.renewalDate} ·{" "}
-                  {RENEWAL_CYCLE_LABELS[item.renewal.cycle]} · lead{" "}
-                  {item.leadTimeDays}d
-                </p>
-                {item.renewal.notes && (
-                  <p className="text-sm text-stone-500">{item.renewal.notes}</p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onDone(item.renewal)}
-                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
-                >
-                  {item.renewal.cycle === "once" ? "Done" : "Renewed"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onEdit(item.renewal)}
-                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(item.renewal.id)}
-                  className="rounded-md border border-stone-300 px-2.5 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
