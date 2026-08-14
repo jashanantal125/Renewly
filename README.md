@@ -61,10 +61,11 @@ in 50 days". That turns the lead-time rule from a number in the code into
 something visible per item, and it is why the cards are worth more than a plain
 sorted list.
 
-The lead-time table itself is now the sliding row of type pills under the
-heading, generated from the same `DEFAULT_LEAD_TIME_DAYS` constant the engine
-uses. Seeing "Passport 90d" drift past "Subscription 7d" makes the core point
-without a paragraph explaining it.
+Under the heading, a "Set reminders for →" label points at a sliding row of the
+types Renewly tracks. It answers "what is this for" in one glance. Lead times
+are deliberately not shown there — a marquee is the wrong place to read numbers
+you cannot act on. They appear where they matter instead: beside each option in
+the form, in the dialog subtitle as you pick a type, and on every saved card.
 
 ## Saving feedback
 
