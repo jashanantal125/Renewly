@@ -4,8 +4,6 @@ One place for road tax, licence, passport, insurance, and subscription renewals 
 
 Built for the [Shortcut Asia](https://shortcut.my) internship challenge (topic 02: Renewal Reminder).
 
-**Thinking document (approach, decisions, flowcharts, AI use):** [THINKING.md](./THINKING.md)
-
 ## Stack
 
 - **Next.js 16** (App Router) + **TypeScript**
