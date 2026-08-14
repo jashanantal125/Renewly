@@ -29,6 +29,7 @@ npm start     # serve production build
 
 1. **Add renewals** — name, type, date, cycle (once / monthly / yearly / custom)
 2. **Reminder view** — items sorted into urgency buckets: Overdue → Act now → Coming up → Later
+3. **Calendar view** — month grid of what is due, with per-item detail explaining its bucket
 
 ## The hard part
 
@@ -51,16 +52,40 @@ Renewly rejects a flat “remind 7 days before everything” rule. Instead:
 
 Core logic lives in `src/lib/` (pure functions + tests). The UI is a thin client over that engine.
 
+## Calendar view
+
+The calendar button in the header opens a month grid. Each day shows a dot per
+renewal, coloured by urgency; clicking a day lists what is due, and clicking an
+item explains *why* it sits in that bucket.
+
+Two decisions worth calling out:
+
+- **Projected cycles.** Recurring items are expanded across the visible month
+  range, so browsing ahead shows next month's subscription even though only one
+  due date is stored. Projected occurrences are dimmed and labelled.
+- **Urgency is measured from the real due date**, never from a projected one.
+  A subscription due next week stays "act now" even when you are looking at its
+  December occurrence.
+
 ## Architecture
 
 ```
-UI (page.tsx)
-  → storage.ts (localStorage)
+UI (page.tsx, components/CalendarPanel.tsx)
+  → storage.ts + useRenewals.ts (localStorage)
   → renewals.ts (create/update)
-  → reminders.ts (urgency + digest)
+  → reminders.ts (urgency + digest + explanations)
+  → calendar.ts (month grid + cycle projection)
   → leadTimes.ts + dates.ts + types.ts
 ```
 
+## Known limits
+
+- Data is per-browser (localStorage); no accounts or sync.
+- Nudges are in-app only — there is no push or email delivery.
+- Cycle projection is capped at 200 occurrences per item per view, so a very
+  short custom cycle on a long-overdue item may not render every date.
+
 ## Project status
 
-Core workflow is working: add / edit / delete / renew + smart reminder digest.
+Core workflow is working: add / edit / delete / renew, smart reminder digest,
+and a calendar with per-item detail.

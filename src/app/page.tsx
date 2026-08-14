@@ -9,6 +9,7 @@ import {
 } from "@/lib/reminders";
 import { createRenewal, updateRenewal, type RenewalInput } from "@/lib/renewals";
 import { useRenewals } from "@/lib/useRenewals";
+import { CalendarPanel } from "@/components/CalendarPanel";
 import type { ReminderView, Renewal, RenewalCycle, RenewalType, Urgency } from "@/lib/types";
 import {
   RENEWAL_CYCLE_LABELS,
@@ -120,6 +121,7 @@ export default function Home() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
 
   const digest = useMemo(() => buildReminderDigest(renewals), [renewals]);
   const grouped = useMemo(() => groupByUrgency(digest), [digest]);
@@ -176,9 +178,20 @@ export default function Home() {
     <div className="min-h-full bg-[radial-gradient(ellipse_at_top,_#f4f7f2_0%,_#eef2f0_45%,_#e8ebe6_100%)] text-stone-900">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-5 py-10 sm:px-8 sm:py-14">
         <header className="space-y-3">
-          <p className="text-sm font-medium tracking-[0.2em] text-emerald-800/80 uppercase">
-            Renewly
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-sm font-medium tracking-[0.2em] text-emerald-800/80 uppercase">
+              Renewly
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowCalendar(true)}
+              aria-label="Open renewal calendar"
+              className="flex items-center gap-2 rounded-lg border border-stone-300 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-stone-400 hover:bg-white"
+            >
+              <CalendarIcon />
+              Calendar
+            </button>
+          </div>
           <h1 className="max-w-xl font-serif text-4xl leading-tight tracking-tight text-stone-900 sm:text-5xl">
             Renew before it lapses.
           </h1>
@@ -395,6 +408,15 @@ export default function Home() {
           </section>
         )}
 
+        {showCalendar && (
+          <CalendarPanel
+            renewals={renewals}
+            onClose={() => setShowCalendar(false)}
+            onEdit={startEdit}
+            onMarkDone={handleMarkDone}
+          />
+        )}
+
         <footer className="border-t border-stone-200/80 pt-6 text-xs leading-relaxed text-stone-500">
           <p>
             Lead times: passport 90d · licence 60d · road tax / insurance 30d ·
@@ -404,6 +426,22 @@ export default function Home() {
         </footer>
       </div>
     </div>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      className="h-4 w-4"
+    >
+      <rect x="2.75" y="4.25" width="14.5" height="13" rx="2" />
+      <path d="M2.75 8.25h14.5M6.75 2.75v3M13.25 2.75v3" />
+    </svg>
   );
 }
 

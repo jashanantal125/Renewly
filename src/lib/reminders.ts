@@ -175,6 +175,33 @@ export function markRenewalDone(renewal: Renewal, now: Date = new Date()): Renew
   };
 }
 
+/**
+ * Plain-English reason for the bucket, so the user can see why an item
+ * nudges when it does instead of trusting an opaque colour.
+ */
+export function explainUrgency(view: ReminderView): string {
+  const { daysUntil, leadTimeDays, urgency } = view;
+  const actionWindow = Math.min(
+    getActionWindow(view.renewal.type),
+    leadTimeDays,
+  );
+
+  if (urgency === "overdue") {
+    return `This lapsed ${Math.abs(daysUntil)} day${
+      Math.abs(daysUntil) === 1 ? "" : "s"
+    } ago. Renew as soon as you can.`;
+  }
+  if (urgency === "act_now") {
+    return `Only ${daysUntil} day${
+      daysUntil === 1 ? "" : "s"
+    } left, and this type usually takes about ${actionWindow} days to sort out.`;
+  }
+  if (urgency === "soon") {
+    return `Reminders for this type start ${leadTimeDays} days ahead, so it is on your radar with ${daysUntil} days to spare.`;
+  }
+  return `Still ${daysUntil} days away. Reminders start ${leadTimeDays} days before it is due.`;
+}
+
 /** Short human phrase for days until / overdue. */
 export function formatDaysUntil(daysUntil: number): string {
   if (daysUntil === 0) return "Due today";
