@@ -27,8 +27,11 @@ function subscribe(listener: () => void) {
   };
 }
 
+// Must be a stable reference: a fresh array each call makes React re-render forever.
+const EMPTY: Renewal[] = [];
+
 function getServerSnapshot(): Renewal[] {
-  return [];
+  return EMPTY;
 }
 
 /**
