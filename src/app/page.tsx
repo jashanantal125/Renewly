@@ -6,11 +6,31 @@ import {
   formatDaysUntil,
   groupByUrgency,
   markRenewalDone,
+  summarizeDigest,
+  type ReminderSummary,
 } from "@/lib/reminders";
+import {
+  acknowledge,
+  acknowledgeAll,
+  buildNotifications,
+  pruneAcks,
+} from "@/lib/notifications";
 import { createRenewal, updateRenewal, type RenewalInput } from "@/lib/renewals";
-import { useRenewals } from "@/lib/useRenewals";
+import { useAcks, useRenewals } from "@/lib/useRenewals";
 import { CalendarPanel } from "@/components/CalendarPanel";
-import type { ReminderView, Renewal, RenewalCycle, RenewalType, Urgency } from "@/lib/types";
+import { NotificationsPanel } from "@/components/NotificationsPanel";
+import {
+  URGENCY_BADGE,
+  URGENCY_BORDER,
+  URGENCY_TITLE,
+} from "@/components/urgencyStyles";
+import type {
+  ReminderView,
+  Renewal,
+  RenewalCycle,
+  RenewalType,
+  Urgency,
+} from "@/lib/types";
 import {
   RENEWAL_CYCLE_LABELS,
   RENEWAL_TYPE_LABELS,
@@ -37,32 +57,6 @@ const emptyForm = (): FormState => ({
   leadTimeOverrideDays: "",
   notes: "",
 });
-
-const URGENCY_STYLES: Record<
-  Urgency,
-  { badge: string; border: string; title: string }
-> = {
-  overdue: {
-    badge: "bg-red-100 text-red-800",
-    border: "border-red-200",
-    title: "Overdue",
-  },
-  act_now: {
-    badge: "bg-amber-100 text-amber-900",
-    border: "border-amber-200",
-    title: "Act now",
-  },
-  soon: {
-    badge: "bg-sky-100 text-sky-900",
-    border: "border-sky-200",
-    title: "Coming up",
-  },
-  later: {
-    badge: "bg-stone-100 text-stone-700",
-    border: "border-stone-200",
-    title: "Later",
-  },
-};
 
 function toInput(form: FormState): RenewalInput | null {
   if (!form.name.trim() || !form.renewalDate) return null;
@@ -117,15 +111,23 @@ function formFromRenewal(renewal: Renewal): FormState {
 
 export default function Home() {
   const [renewals, setRenewals] = useRenewals();
+  const [acks, setAcks] = useAcks();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const digest = useMemo(() => buildReminderDigest(renewals), [renewals]);
   const grouped = useMemo(() => groupByUrgency(digest), [digest]);
-  const nudgeCount = digest.filter((d) => d.shouldNudge).length;
+  const summary = useMemo(() => summarizeDigest(digest), [digest]);
+  const notifications = useMemo(
+    () => buildNotifications(digest, acks),
+    [digest, acks],
+  );
+  const silencedCount =
+    digest.filter((view) => view.shouldNudge).length - notifications.length;
 
   function resetForm() {
     setForm(emptyForm());
@@ -160,7 +162,14 @@ export default function Home() {
   }
 
   function removeRenewal(id: string) {
-    setRenewals((prev) => prev.filter((r) => r.id !== id));
+    const remaining = renewals.filter((r) => r.id !== id);
+    setRenewals(remaining);
+    setAcks((prev) =>
+      pruneAcks(
+        prev,
+        remaining.map((r) => r.id),
+      ),
+    );
     if (editingId === id) resetForm();
   }
 
@@ -177,34 +186,38 @@ export default function Home() {
   return (
     <div className="min-h-full bg-[radial-gradient(ellipse_at_top,_#f4f7f2_0%,_#eef2f0_45%,_#e8ebe6_100%)] text-stone-900">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-5 py-10 sm:px-8 sm:py-14">
-        <header className="space-y-3">
+        <header className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <p className="text-sm font-medium tracking-[0.2em] text-emerald-800/80 uppercase">
               Renewly
             </p>
-            <button
-              type="button"
-              onClick={() => setShowCalendar(true)}
-              aria-label="Open renewal calendar"
-              className="flex items-center gap-2 rounded-lg border border-stone-300 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-stone-400 hover:bg-white"
-            >
-              <CalendarIcon />
-              Calendar
-            </button>
+            <div className="flex items-center gap-2">
+              <HeaderButton
+                label="Notifications"
+                onClick={() => setShowNotifications(true)}
+                badge={notifications.length}
+                icon={<BellIcon />}
+              />
+              <HeaderButton
+                label="Calendar"
+                onClick={() => setShowCalendar(true)}
+                icon={<CalendarIcon />}
+              />
+            </div>
           </div>
-          <h1 className="max-w-xl font-serif text-4xl leading-tight tracking-tight text-stone-900 sm:text-5xl">
-            Renew before it lapses.
-          </h1>
-          <p className="max-w-lg text-base leading-relaxed text-stone-600">
-            Track road tax, licences, passports, insurance, and subscriptions.
-            Nudges use lead times that match how long each renewal actually
-            takes — not a flat seven-day alert for everything.
-          </p>
-          <p className="text-sm text-stone-500">
-            {renewals.length === 0
-              ? "No renewals yet."
-              : `${nudgeCount} need attention · ${renewals.length} total`}
-          </p>
+
+          <div className="space-y-3">
+            <h1 className="max-w-xl font-serif text-4xl leading-tight tracking-tight text-stone-900 sm:text-5xl">
+              Renew before it lapses.
+            </h1>
+            <p className="max-w-lg text-base leading-relaxed text-stone-600">
+              Track road tax, licences, passports, insurance, and subscriptions.
+              Nudges use lead times that match how long each renewal actually
+              takes — not a flat seven-day alert for everything.
+            </p>
+          </div>
+
+          <SummaryBar summary={summary} />
         </header>
 
         <section className="space-y-4">
@@ -417,6 +430,19 @@ export default function Home() {
           />
         )}
 
+        {showNotifications && (
+          <NotificationsPanel
+            notifications={notifications}
+            silencedCount={silencedCount}
+            onClose={() => setShowNotifications(false)}
+            onDismiss={(view) => setAcks((prev) => acknowledge(prev, view))}
+            onDismissAll={() =>
+              setAcks((prev) => acknowledgeAll(prev, notifications))
+            }
+            onMarkDone={handleMarkDone}
+          />
+        )}
+
         <footer className="border-t border-stone-200/80 pt-6 text-xs leading-relaxed text-stone-500">
           <p>
             Lead times: passport 90d · licence 60d · road tax / insurance 30d ·
@@ -429,6 +455,66 @@ export default function Home() {
   );
 }
 
+function HeaderButton({
+  label,
+  icon,
+  badge,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={
+        badge ? `${label}, ${badge} needing attention` : `Open ${label}`
+      }
+      className="group relative inline-flex items-center gap-2 rounded-xl border border-emerald-900/10 bg-gradient-to-b from-white to-stone-50 px-2.5 py-2 text-sm font-medium text-stone-800 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-900/25 hover:shadow-md active:translate-y-0 sm:px-3.5"
+    >
+      <span className="grid h-6 w-6 place-items-center rounded-lg bg-emerald-800 text-white transition group-hover:bg-emerald-900">
+        {icon}
+      </span>
+      <span className="hidden sm:inline">{label}</span>
+      {badge != null && badge > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[11px] font-semibold text-white shadow-sm">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function SummaryBar({ summary }: { summary: ReminderSummary }) {
+  const cards: { label: string; value: number; accent: string }[] = [
+    { label: "Total", value: summary.total, accent: "text-stone-900" },
+    { label: "Overdue", value: summary.overdue, accent: "text-red-700" },
+    { label: "Due soon", value: summary.dueSoon, accent: "text-amber-700" },
+    { label: "Upcoming", value: summary.upcoming, accent: "text-stone-600" },
+  ];
+
+  return (
+    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {cards.map((card) => (
+        <div
+          key={card.label}
+          className="rounded-xl border border-stone-200 bg-white/70 px-3 py-2.5"
+        >
+          <dt className="text-xs tracking-wide text-stone-500 uppercase">
+            {card.label}
+          </dt>
+          <dd className={`text-2xl font-semibold ${card.accent}`}>
+            {card.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function CalendarIcon() {
   return (
     <svg
@@ -436,11 +522,30 @@ function CalendarIcon() {
       viewBox="0 0 20 20"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.5}
+      strokeWidth={1.6}
+      strokeLinecap="round"
       className="h-4 w-4"
     >
-      <rect x="2.75" y="4.25" width="14.5" height="13" rx="2" />
+      <rect x="2.75" y="4.25" width="14.5" height="13" rx="2.5" />
       <path d="M2.75 8.25h14.5M6.75 2.75v3M13.25 2.75v3" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <path d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 3-1.25 4-1.25 4h11.5s-1.25-1-1.25-4A4.5 4.5 0 0 0 10 3Z" />
+      <path d="M8.5 14.5a1.75 1.75 0 0 0 3 0" />
     </svg>
   );
 }
@@ -458,12 +563,10 @@ function UrgencySection({
   onDone: (r: Renewal) => void;
   onDelete: (id: string) => void;
 }) {
-  const style = URGENCY_STYLES[urgency];
-
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold tracking-wide text-stone-700 uppercase">
-        {style.title}
+        {URGENCY_TITLE[urgency]}
         <span className="ml-2 font-normal normal-case text-stone-400">
           {items.length}
         </span>
@@ -472,7 +575,7 @@ function UrgencySection({
         {items.map((item) => (
           <li
             key={item.renewal.id}
-            className={`rounded-lg border bg-white/90 px-4 py-3 ${style.border}`}
+            className={`rounded-lg border bg-white/90 px-4 py-3 ${URGENCY_BORDER[urgency]}`}
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">
@@ -481,7 +584,7 @@ function UrgencySection({
                     {item.renewal.name}
                   </p>
                   <span
-                    className={`rounded px-1.5 py-0.5 text-xs font-medium ${style.badge}`}
+                    className={`rounded px-1.5 py-0.5 text-xs font-medium ${URGENCY_BADGE[urgency]}`}
                   >
                     {formatDaysUntil(item.daysUntil)}
                   </span>

@@ -1,51 +1,24 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { createLocalStore } from "./localStore";
+import type { AckMap } from "./notifications";
 import type { Renewal } from "./types";
-import { loadRenewals, saveRenewals } from "./storage";
 
-let memory: Renewal[] | null = null;
-const listeners = new Set<() => void>();
+const NO_RENEWALS: Renewal[] = [];
+const NO_ACKS: AckMap = {};
 
-function read(): Renewal[] {
-  if (memory === null) {
-    memory = loadRenewals();
-  }
-  return memory;
-}
+const renewalStore = createLocalStore<Renewal[]>(
+  "renewly.renewals.v1",
+  NO_RENEWALS,
+);
 
-function write(next: Renewal[]) {
-  memory = next;
-  saveRenewals(next);
-  listeners.forEach((listener) => listener());
-}
+/** Acknowledged notifications, so a dismissed nudge stays quiet. */
+const ackStore = createLocalStore<AckMap>("renewly.acks.v1", NO_ACKS);
 
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-// Must be a stable reference: a fresh array each call makes React re-render forever.
-const EMPTY: Renewal[] = [];
-
-function getServerSnapshot(): Renewal[] {
-  return EMPTY;
-}
-
-/**
- * Persist renewals in localStorage and keep React in sync.
- * useSyncExternalStore avoids the hydration / setState-in-effect pitfalls.
- */
 export function useRenewals() {
-  const renewals = useSyncExternalStore(subscribe, read, getServerSnapshot);
+  return renewalStore.useStore();
+}
 
-  function setRenewals(updater: Renewal[] | ((prev: Renewal[]) => Renewal[])) {
-    const prev = read();
-    const next = typeof updater === "function" ? updater(prev) : updater;
-    write(next);
-  }
-
-  return [renewals, setRenewals] as const;
+export function useAcks() {
+  return ackStore.useStore();
 }

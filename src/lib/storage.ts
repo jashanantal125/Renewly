@@ -1,27 +1,24 @@
-import type { Renewal } from "./types";
-
-const STORAGE_KEY = "renewly.renewals.v1";
-
 function canUseStorage(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return (
+    typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+  );
 }
 
-export function loadRenewals(): Renewal[] {
-  if (!canUseStorage()) return [];
+/** Read JSON from localStorage, falling back on missing or corrupt values. */
+export function loadJson<T>(key: string, fallback: T): T {
+  if (!canUseStorage()) return fallback;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Renewal[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
   } catch {
-    return [];
+    return fallback;
   }
 }
 
-export function saveRenewals(renewals: Renewal[]): void {
+export function saveJson<T>(key: string, value: T): void {
   if (!canUseStorage()) return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(renewals));
+  window.localStorage.setItem(key, JSON.stringify(value));
 }
 
 export function createId(): string {

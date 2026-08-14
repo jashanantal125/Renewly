@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import {
   buildCalendarMonth,
   findDay,
+  monthEntries,
   projectOccurrencesInRange,
   shiftMonth,
 } from "./calendar";
@@ -101,6 +102,27 @@ describe("buildCalendarMonth", () => {
       .flat()
       .some((day) => day.entries.length > 0);
     assert.equal(anyEntries, false);
+  });
+});
+
+describe("monthEntries", () => {
+  it("lists the month's occurrences in date order, excluding spill-over days", () => {
+    const calendar = buildCalendarMonth(
+      [
+        renewal({ name: "Road tax", type: "road_tax", renewalDate: "2026-08-20" }),
+        renewal({ name: "Car insurance", type: "insurance", renewalDate: "2026-08-03" }),
+        // 30 July falls in the grid's first row but not in August.
+        renewal({ name: "Old bill", type: "other", renewalDate: "2026-07-30" }),
+      ],
+      2026,
+      7,
+      now,
+    );
+
+    assert.deepEqual(
+      monthEntries(calendar).map((entry) => `${entry.iso} ${entry.renewal.name}`),
+      ["2026-08-03 Car insurance", "2026-08-20 Road tax"],
+    );
   });
 });
 

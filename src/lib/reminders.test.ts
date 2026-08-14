@@ -9,12 +9,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildReminderDigest,
   buildReminderView,
   classifyUrgency,
   formatDaysUntil,
   markRenewalDone,
   nextRenewalDate,
   sortReminders,
+  summarizeDigest,
 } from "./reminders";
 import type { Renewal } from "./types";
 
@@ -111,6 +113,29 @@ describe("sortReminders", () => {
     const sorted = sortReminders(views);
     assert.equal(sorted[0].renewal.name, "Overdue item");
     assert.equal(sorted[1].renewal.name, "Later item");
+  });
+});
+
+describe("summarizeDigest", () => {
+  it("counts overdue, due soon, and upcoming separately", () => {
+    const now = new Date(2026, 7, 14);
+    const digest = buildReminderDigest(
+      [
+        renewal({ name: "Car insurance", type: "insurance", renewalDate: "2026-08-11" }),
+        renewal({ name: "Road tax", type: "road_tax", renewalDate: "2026-08-20" }),
+        renewal({ name: "Netflix", type: "subscription", renewalDate: "2026-09-10" }),
+        renewal({ name: "Passport", type: "passport", renewalDate: "2027-01-01" }),
+      ],
+      now,
+    );
+
+    // Netflix is 27 days out on a 7-day lead, so it is still upcoming.
+    assert.deepEqual(summarizeDigest(digest), {
+      total: 4,
+      overdue: 1,
+      dueSoon: 1,
+      upcoming: 2,
+    });
   });
 });
 

@@ -175,6 +175,32 @@ export function markRenewalDone(renewal: Renewal, now: Date = new Date()): Renew
   };
 }
 
+export interface ReminderSummary {
+  total: number;
+  overdue: number;
+  /** Anything already nudging: act now + coming up. */
+  dueSoon: number;
+  /** Still outside its lead-time window. */
+  upcoming: number;
+}
+
+/**
+ * Headline counts for the dashboard.
+ *
+ * "Due soon" deliberately merges act-now and coming-up: from the top of the
+ * page the useful question is "how many things need me", and the detailed
+ * split is one scroll away in the grouped list.
+ */
+export function summarizeDigest(views: ReminderView[]): ReminderSummary {
+  const groups = groupByUrgency(views);
+  return {
+    total: views.length,
+    overdue: groups.overdue.length,
+    dueSoon: groups.act_now.length + groups.soon.length,
+    upcoming: groups.later.length,
+  };
+}
+
 /**
  * Plain-English reason for the bucket, so the user can see why an item
  * nudges when it does instead of trusting an opaque colour.

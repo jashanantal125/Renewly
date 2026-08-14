@@ -161,6 +161,20 @@ export function buildCalendarMonth(
   return { year, month, label: monthLabel(year, month), weeks };
 }
 
+/**
+ * Every occurrence inside the visible month, in date order.
+ *
+ * Days that spill in from the neighbouring months are excluded so the list
+ * matches the month heading. Overdue items earlier in the month are kept —
+ * they are still the most actionable thing on the page.
+ */
+export function monthEntries(calendar: CalendarMonth): CalendarEntry[] {
+  return calendar.weeks
+    .flat()
+    .filter((day) => day.inCurrentMonth)
+    .flatMap((day) => day.entries);
+}
+
 export function findDay(
   calendar: CalendarMonth,
   iso: string,
